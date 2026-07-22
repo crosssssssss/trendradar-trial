@@ -46,6 +46,8 @@ concurrency:
 permissions:
   contents: read
   actions: write
+  pages: write
+  id-token: write
 
 jobs:
   crawl:
@@ -170,6 +172,29 @@ jobs:
         run: uv run python -m trendradar
 
       # --------------------------------------------------------------------------------
+      # 🌐 GITHUB PAGES DEPLOY / 将本次报告发布为网页
+      # --------------------------------------------------------------------------------
+      - name: Prepare GitHub Pages assets
+        if: success()
+        run: |
+          if [ ! -f index.html ]; then
+            echo "❌ 未找到 index.html，请确认爬虫已生成网页报告"
+            exit 1
+          fi
+          mkdir -p github_pages_dist
+          cp index.html github_pages_dist/index.html
+          touch github_pages_dist/.nojekyll
+
+      - name: Configure GitHub Pages
+        if: success()
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        if: success()
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: github_pages_dist
+      # --------------------------------------------------------------------------------
       # ☁️ CLOUDFLARE PAGES DEPLOY / 部署到 Cloudflare Pages（可选）
       # --------------------------------------------------------------------------------
       # 将爬虫生成的 index.html 自动部署到 Cloudflare Pages，国内访问比 GitHub Pages 更快。
@@ -213,3 +238,18 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy cloudflare_dist --project-name=${{ secrets.CLOUDFLARE_PROJECT_NAME }}
+
+  deploy:
+    name: Deploy report to GitHub Pages
+    needs: crawl
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
